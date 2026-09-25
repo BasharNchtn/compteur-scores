@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Compteur de Scores</title>
+<style>
+:root{
+  --bg:#faf7f2;--card:#fff;--ink:#2b2622;--sub:#7a7168;--accent:#c2622f;--accent2:#8a9a6b;
+  --line:#e7e0d6;--danger:#b3492f;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#1c1a17;--card:#26231f;--ink:#eee7dc;--sub:#a89e90;--line:#3a352f;}
+}
+:root[data-theme="dark"]{--bg:#1c1a17;--card:#26231f;--ink:#eee7dc;--sub:#a89e90;--line:#3a352f;}
+*{box-sizing:border-box;}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+header{position:sticky;top:0;padding-top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;border-bottom:1px solid var(--line);}
+h1{font-size:1.05rem;margin:.7rem 1rem .5rem;}
+.tabs{display:flex;gap:.4rem;overflow-x:auto;padding:0 .6rem .6rem;-webkit-overflow-scrolling:touch;}
+.tab{flex:0 0 auto;padding:.5rem .8rem;border-radius:999px;border:1px solid var(--line);background:var(--card);
+  color:var(--sub);font-size:.85rem;white-space:nowrap;cursor:pointer;}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+main{padding:1rem;max-width:640px;margin:0 auto;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1rem;margin-bottom:1rem;}
+h2{font-size:1rem;margin:0 0 .6rem;}
+button{font:inherit;border:none;border-radius:10px;padding:.6rem 1rem;cursor:pointer;background:var(--accent);color:#fff;}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+button.sub{background:var(--accent2);}
+button.danger{background:var(--danger);}
+button:disabled{opacity:.4;cursor:default;}
+input[type=text],input[type=number]{font:inherit;padding:.5rem;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);width:100%;}
+.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;}
+.chip{padding:.4rem .7rem;border-radius:999px;border:1px solid var(--line);background:var(--bg);cursor:pointer;font-size:.85rem;}
+.chip.sel{background:var(--accent2);color:#fff;border-color:var(--accent2);}
+table{width:100%;border-collapse:collapse;overflow-x:auto;display:block;}
+th,td{padding:.4rem;text-align:center;border-bottom:1px solid var(--line);}
+th{font-size:.8rem;color:var(--sub);}
+td input{width:4.5rem;text-align:center;}
+.no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.no-spin{-moz-appearance:textfield;appearance:textfield;}
+.sublabel{font-size:.8rem;color:var(--sub);margin:.3rem 0;}
+.saved-item{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--line);}
+.rank1{font-weight:700;color:var(--accent);}
+</style>
+</head>
+<body>
+<header>
+<h1>🎲 Compteur de Scores</h1>
+<div class="tabs" id="tabs"></div>
+</header>
+<main id="main"></main>
+<script>
+const GAMES = {
+  ohanami:{label:'Ohanami',icon:'🌸',mode:'ohanami',highWins:true},
+  generique:{label:'Générique',icon:'🔢',mode:'rounds',highWins:true,configurable:true},
+  millesabords:{label:'Mille Sabords',icon:'☠️',mode:'dice',highWins:true,target:6000}
+};
+function pyramidal(n){ return n*(n+1)/2; }
+const OHA_FIELDS=[['blue'],['blue','green'],['blue','green','gray','pink']];
+const OHA_LABEL={blue:'Eau 🔵 (3pts)',green:'Végétation 🟢 (4pts)',gray:'Pierre ⬜ (7pts)',pink:'Sakura 🌸 (pyramidal)'};
+function ohaFloor(game,ri,p,f){
+  if((f==='blue'||f==='green') && ri>0){ const prev=game.ohanamiRounds[ri-1]&&game.ohanamiRounds[ri-1][p]; return prev?(prev[f]||0):0; }
+  return 0;
+}
+function ohaMaxTotal(ri){ return (ri+1)*10; }
+function ohaTotalCards(c){ return (c.blue||0)+(c.green||0)+(c.gray||0)+(c.pink||0); }
+function ohaEnsureSeason(game, ri){
+  if(!game.ohanamiRounds[ri]) game.ohanamiRounds[ri]={};
+  game.players.forEach(p=>{
+    if(!game.ohanamiRounds[ri][p]){
+      const prev = ri>0 ? (game.ohanamiRounds[ri-1][p]||{}) : {};
+      game.ohanamiRounds[ri][p]={blue:prev.blue||0, green:prev.green||0, gray:0, pink:0};
+    }
+  });
+}
+function ohanamiRoundScore(ri,c){
+  let s=(c.blue||0)*3;
+  if(ri>=1) s+=(c.green||0)*4;
+  if(ri>=2) s+=(c.gray||0)*7 + pyramidal(c.pink||0);
+  return s;
+}
+const COMBO={3:100,4:200,5:500,6:1000,7:2000,8:4000};
+const PIRATE_CARDS={
+  none:{label:'Aucune',double:false,gold:0,diamond:0,skull:0,merge:false},
+  pirate:{label:'Pirate (points doublés)',double:true,gold:0,diamond:0,skull:0,merge:false},
+  gold:{label:"Pièce d'or offerte (+1 dé or)",double:false,gold:1,diamond:0,skull:0,merge:false},
+  diamond:{label:'Diamant offert (+1 dé diamant)',double:false,gold:0,diamond:1,skull:0,merge:false},
+  skull1:{label:'Tête de mort ×1 (départ avec 1)',double:false,gold:0,diamond:0,skull:1,merge:false},
+  skull2:{label:'Tête de mort ×2 (départ avec 2)',double:false,gold:0,diamond:0,skull:2,merge:false},
+  animals:{label:'Animaux (singe+perroquet fusionnés)',double:false,gold:0,diamond:0,skull:0,merge:true},
+  gardienne:{label:'Gardienne (relance exceptionnelle d\'un dé tête de mort — déjà reflété dans vos dés saisis)',double:false,gold:0,diamond:0,skull:0,merge:false},
+  coffre:{label:"Coffre / Île au Trésor (points sécurisés même si tour perdu)",double:false,gold:0,diamond:0,skull:0,merge:false,special:'coffre'},
+  corsaire:{label:'Corsaire / Bateau pirate (sabres requis, bonus ou malus)',double:false,gold:0,diamond:0,skull:0,merge:false,special:'corsaire'}
+};
+const CORSAIRE_TABLE={2:300,3:500,4:1000};
+function calcMilleSabords(d, cardKey){
+  const c=PIRATE_CARDS[cardKey]||PIRATE_CARDS.none;
+  const rawSkull=+d.skull||0, rawGold=+d.gold||0, rawDiamond=+d.diamond||0, rawSabre=+d.sabre||0, rawSinge=+d.singe||0, rawPerroquet=+d.perroquet||0;
+  const skull=rawSkull+c.skull;
+  if(c.special==='corsaire'){
+    const required=+d.sabreRequired||3, amount=CORSAIRE_TABLE[required]||500;
+    if(rawSabre<required) return {score:-amount, detail:`Bateau pirate échoué (${rawSabre}/${required} sabres) : -${amount}pts, dés perdus.`};
+    if(skull>=3) return {score:amount, detail:`3 têtes de mort, mais Bateau pirate réussi (${rawSabre}/${required} sabres) : +${amount}pts (reste des dés perdu par le bust).`};
+    // sabres réussis, pas de bust : score normal + bonus, calculé plus bas
+  } else if(skull>=3){
+    if(c.special==='coffre'){ const prot=+d.protected||0; return {score:prot, detail:`3 têtes de mort : tour perdu, mais ${prot} pts sécurisés dans le Coffre / Île au Trésor.`}; }
+    return {score:0, detail:'3 têtes de mort ou plus : tour perdu.'};
+  }
+  const gold=rawGold+c.gold, diamond=rawDiamond+c.diamond, sabre=rawSabre;
+  let groups;
+  if(c.merge){ groups=[['or',gold,true],['diamant',diamond,true],['sabre',sabre,false],['animaux',rawSinge+rawPerroquet,false]]; }
+  else { groups=[['or',gold,true],['diamant',diamond,true],['sabre',sabre,false],['singe',rawSinge,false],['perroquet',rawPerroquet,false]]; }
+  let score=0, detail=[];
+  groups.forEach(([name,count,indiv])=>{
+    const combo = count>=3 ? COMBO[Math.min(count,8)] : 0;
+    const indivPts = indiv ? count*100 : 0;
+    if(count>0) detail.push(`${name}×${count}${combo?` (combo ${combo})`:''}${indivPts?` (+${indivPts})`:''}`);
+    score += combo + indivPts;
+  });
+  const physicalUsed = rawSkull+rawGold+rawDiamond+rawSabre+rawSinge+rawPerroquet;
+  const wasted = groups.some(([,count,indiv])=> !indiv && count>0 && count<3);
+  let bonus='';
+  if(skull===0 && physicalUsed===8 && !wasted){ score+=500; bonus=' + 500 (coffre plein)'; }
+  let win=false;
+  groups.forEach(([name,count])=>{ if(count>=9){ win=true; } });
+  if(win) bonus+=' 🏆 MAGIE PIRATE (9 symboles identiques) : VICTOIRE IMMÉDIATE !';
+  if(c.special==='corsaire'){
+    const required=+d.sabreRequired||3, amount=CORSAIRE_TABLE[required]||500;
+    score+=amount; bonus+=` + ${amount} (Bateau pirate réussi, ${rawSabre}/${required} sabres)`;
+  }
+  if(c.double){ score*=2; bonus+=' ×2 (carte Pirate)'; }
+  return {score, detail: (detail.join(', ')||'aucun dé scorant')+bonus, win};
+}
+let tab = 'players';
+let players = loadJSON('bs_players', []);
+let view = {}; // per-game current in-progress game, keyed by gameType
+
+function loadJSON(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
+function saveJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function savedGames(gt){return loadJSON('bs_saved_'+gt,[]);}
+function setSavedGames(gt,arr){saveJSON('bs_saved_'+gt,arr);}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+
+async function exportJSON(obj, filename, statusEl){
+  const data = JSON.stringify(obj, null, 2);
+  if(statusEl) statusEl.textContent='Export en cours…';
+  try{
+    const dl = window.claude ? await window.claude.use("downloads") : null;
+    if(dl){ await dl.save({filename, data}); if(statusEl) statusEl.textContent='✅ Fichier proposé au téléchargement.'; return; }
+  }catch(e){ if(statusEl) statusEl.textContent='⚠️ '+(e.message||'Échec du téléchargement.'); }
+  try{
+    const blob=new Blob([data],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    if(statusEl) statusEl.textContent='✅ Fichier proposé au téléchargement.';
+  }catch(e){ if(statusEl) statusEl.textContent='❌ Le téléchargement direct est bloqué ici. Copiez ce JSON manuellement :\n'+data.slice(0,300)+'…'; }
+}
+function importJSON(cb){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='application/json';
+  inp.onchange=()=>{
+    const f=inp.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{try{cb(JSON.parse(r.result));}catch(e){alert('Fichier JSON invalide');}};
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+function renderTabs(){
+  const t=document.getElementById('tabs');
+  const list=[['players','👤','Joueurs'],...Object.entries(GAMES).map(([k,g])=>[k,g.icon,g.label])];
+  t.innerHTML=list.map(([k,icon,label])=>
+    `<div class="tab ${tab===k?'active':''}" data-tab="${k}">${icon} ${label}</div>`).join('');
+  t.querySelectorAll('.tab').forEach(el=>el.onclick=()=>{tab=el.dataset.tab;render();});
+}
+
+function render(){
+  renderTabs();
+  const m=document.getElementById('main');
+  if(tab==='players') return renderPlayers(m);
+  renderGameSetup(m, tab);
+}
+
+// ---- Joueurs ----
+function renderPlayers(m){
+  m.innerHTML=`
+  <div class="card">
+    <h2>Liste des joueurs</h2>
+    <div class="row" id="plist"></div>
+    <div class="row" style="margin-top:.7rem">
+      <input type="text" id="newp" placeholder="Nom du joueur">
+      <button id="addp">Ajouter</button>
+    </div>
+  </div>
+  <div class="card row">
+    <button class="ghost" id="exp">Exporter (JSON)</button>
+    <button class="ghost" id="imp">Importer (JSON)</button>
+    <span class="sublabel" id="expstatus"></span>
+  </div>`;
+  const pl=m.querySelector('#plist');
+  pl.innerHTML=players.map((p,i)=>`<span class="chip">${p} <b data-del="${i}" style="cursor:pointer">✕</b></span>`).join('')||'<span class="sublabel">Aucun joueur pour le moment.</span>';
+  pl.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{players.splice(+b.dataset.del,1);saveJSON('bs_players',players);render();});
+  m.querySelector('#addp').onclick=()=>{
+    const inp=m.querySelector('#newp'); const v=inp.value.trim();
+    if(v && !players.includes(v)){players.push(v);saveJSON('bs_players',players);render();}
+  };
+  m.querySelector('#exp').onclick=()=>exportJSON(players,'joueurs.json', m.querySelector('#expstatus'));
+  m.querySelector('#imp').onclick=()=>importJSON(d=>{if(Array.isArray(d)){players=[...new Set([...players,...d])];saveJSON('bs_players',players);render();}});
+}
+
+// ---- Setup / reprise d'une partie ----
+function renderGameSetup(m, gt){
+  const g=GAMES[gt];
+  if(view[gt]) return renderPlay(m, gt);
+  const saved=savedGames(gt);
+  m.innerHTML=`
+  <div class="card">
+    <h2>${g.icon} ${g.label} — nouvelle partie</h2>
+    <div class="sublabel">Sélectionnez les joueurs</div>
+    <div class="row" id="psel"></div>
+    <div class="row" style="margin-top:.6rem">
+      <input type="text" id="newp2" placeholder="Ajouter un joueur">
+      <button class="sub" id="addp2">+</button>
+    </div>
+    <div class="sublabel" id="orderlabel" style="margin-top:.8rem;display:none">Ordre de jeu</div>
+    <div id="orderlist"></div>
+    ${g.configurable?`<div class="sublabel" style="margin-top:.8rem">Qui gagne ?</div>
+    <div class="row"><span class="chip sel" data-hw="1">Le plus haut score</span><span class="chip" data-hw="0">Le plus bas score</span></div>
+    <div class="sublabel" style="margin-top:.8rem">Saisie des scores</div>
+    <div class="row"><span class="chip sel" data-em="together">Tous ensemble (par manche)</span><span class="chip" data-em="turns">Chacun son tour</span></div>`:''}
+    <div style="margin-top:1rem"><button id="start">Jouer ▶</button></div>
+  </div>
+  ${saved.length?`<div class="card">
+    <h2>Parties en cours</h2>
+    ${saved.map(s=>`<div class="saved-item"><span>${s.players.join(', ')}<br><small class="sublabel">${new Date(s.date).toLocaleString()}</small></span>
+      <span class="row"><button class="sub" data-resume="${s.id}">Reprendre</button><button class="danger" data-del="${s.id}">✕</button></span></div>`).join('')}
+  </div>`:''}
+  <div class="card row">
+    <button class="ghost" id="impg">Importer une partie (JSON)</button>
+  </div>`;
+  let sel=[];
+  let highWinsChoice=true;
+  let entryModeChoice='together';
+  m.querySelectorAll('[data-hw]').forEach(c=>c.onclick=()=>{
+    m.querySelectorAll('[data-hw]').forEach(x=>x.classList.remove('sel'));
+    c.classList.add('sel'); highWinsChoice = c.dataset.hw==='1';
+  });
+  m.querySelectorAll('[data-em]').forEach(c=>c.onclick=()=>{
+    m.querySelectorAll('[data-em]').forEach(x=>x.classList.remove('sel'));
+    c.classList.add('sel'); entryModeChoice = c.dataset.em;
+  });
+  const psel=m.querySelector('#psel');
+  const orderlist=m.querySelector('#orderlist');
+  const orderlabel=m.querySelector('#orderlabel');
+  function drawSel(){
+    psel.innerHTML=players.map(p=>`<span class="chip ${sel.includes(p)?'sel':''}" data-p="${p}">${p}</span>`).join('')||'<span class="sublabel">Ajoutez des joueurs d\'abord.</span>';
+    psel.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+      const p=c.dataset.p;
+      if(sel.includes(p)) sel=sel.filter(x=>x!==p); else sel.push(p);
+      drawSel();
+    });
+    orderlabel.style.display = sel.length ? '' : 'none';
+    orderlist.innerHTML = sel.map((p,i)=>`<div class="saved-item"><span>${i+1}. ${p}</span>
+      <span class="row"><button class="ghost" data-up="${i}" ${i===0?'disabled':''}>▲</button><button class="ghost" data-down="${i}" ${i===sel.length-1?'disabled':''}>▼</button></span></div>`).join('');
+    orderlist.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.up; [sel[i-1],sel[i]]=[sel[i],sel[i-1]]; drawSel(); });
+    orderlist.querySelectorAll('[data-down]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.down; [sel[i+1],sel[i]]=[sel[i],sel[i+1]]; drawSel(); });
+  }
+  drawSel();
+  m.querySelector('#addp2').onclick=()=>{
+    const inp=m.querySelector('#newp2'); const v=inp.value.trim();
+    if(v){ if(!players.includes(v)){players.push(v);saveJSON('bs_players',players);} if(!sel.includes(v)) sel.push(v); inp.value=''; drawSel();}
+  };
+  m.querySelector('#start').onclick=()=>{
+    if(sel.length<1) return alert('Choisissez au moins un joueur.');
+    view[gt]={id:uid(),date:Date.now(),gameType:gt,players:[...sel],rounds:[],turns:[],highWins:g.configurable?highWinsChoice:g.highWins,entryMode:g.configurable?entryModeChoice:'together',ohanamiRounds: gt==='ohanami'?[{},{},{}]:undefined,ohanamiCurrentSeason:0};
+    render();
+  };
+  m.querySelectorAll('[data-resume]').forEach(b=>b.onclick=()=>{
+    view[gt]=saved.find(s=>s.id===b.dataset.resume); render();
+  });
+  m.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+    setSavedGames(gt, saved.filter(s=>s.id!==b.dataset.del)); render();
+  });
+  m.querySelector('#impg').onclick=()=>importJSON(d=>{
+    if(d && d.gameType===gt){view[gt]=d; render();} else alert('Ce fichier ne correspond pas à ce jeu.');
+  });
+}
+
+function persistGame(gt){
+  const g=view[gt]; let saved=savedGames(gt);
+  saved=saved.filter(s=>s.id!==g.id); saved.push(g);
+  setSavedGames(gt,saved);
+}
+function endGame(gt){
+  let saved=savedGames(gt).filter(s=>s.id!==view[gt].id);
+  setSavedGames(gt,saved); view[gt]=null; render();
+}
+
+function totals(g){
+  const t={}; g.players.forEach(p=>t[p]=0);
+  if(g.gameType==='ohanami'){
+    (g.ohanamiRounds||[]).forEach((round,ri)=>{ g.players.forEach(p=>{ const c=round[p]; if(c) t[p]+=ohanamiRoundScore(ri,c); }); });
+    return t;
+  }
+  (g.rounds||[]).forEach(r=>g.players.forEach(p=>t[p]+=Number(r.scores[p]||0)));
+  (g.turns||[]).forEach(tu=>{ if(g.players.includes(tu.player)) t[tu.player]+=Number(tu.points||0); });
+  if(g.gameType==='millesabords') g.players.forEach(p=>{ if(t[p]<0) t[p]=0; });
+  return t;
+}
+function ranking(g,totalsObj,highWins){
+  return [...g.players].sort((a,b)=> highWins? totalsObj[b]-totalsObj[a] : totalsObj[a]-totalsObj[b]);
+}
+
+// ---- Écran de jeu ----
+function renderPlay(m, gt){
+  const g=GAMES[gt], game=view[gt];
+  const hw = game.highWins ?? g.highWins;
+  const t=totals(game); const rank=ranking(game,t,hw);
+  let body='';
+  let nextP=null;
+  let editingIndex=null;
+  if(g.mode==='rounds' && game.entryMode!=='turns'){
+    body=`<table><thead><tr><th>Manche</th>${game.players.map(p=>`<th>${p}</th>`).join('')}</tr></thead><tbody>
+      ${game.rounds.map((r,ri)=>`<tr><td>${ri+1}</td>${game.players.map(p=>`<td><input type="number" data-r="${ri}" data-p="${p}" value="${r.scores[p]??''}"></td>`).join('')}</tr>`).join('')}
+    </tbody><tfoot><tr><th>Total</th>${game.players.map(p=>`<th>${t[p]}</th>`).join('')}</tr></tfoot></table>
+    <div style="margin-top:.8rem"><button class="sub" id="addround">+ Manche</button></div>`;
+  } else if(g.mode==='rounds' && game.entryMode==='turns'){
+    const tbp={}; game.players.forEach(p=>tbp[p]=[]);
+    (game.turns||[]).forEach((tu,i)=>{ if(tbp[tu.player]) tbp[tu.player].push({...tu,idx:i}); });
+    const lastP = game.turns && game.turns.length ? game.turns[game.turns.length-1].player : null;
+    nextP = lastP ? game.players[(game.players.indexOf(lastP)+1)%game.players.length] : game.players[0];
+    body=`<table><thead><tr><th>Joueur</th><th>Total</th></tr></thead><tbody>
+    ${game.players.map(p=>`<tr><td>${p}</td><td>${t[p]}</td></tr>`).join('')}
+    </tbody></table>
+    ${game.players.map(p=>`<div class="sublabel" style="margin-top:.5rem"><b>${p}</b></div><div class="row">
+      ${tbp[p].length? tbp[p].map((tu,ix)=>`<span class="chip" data-turn="${tu.idx}">Tour ${ix+1} : ${tu.points}</span>`).join('') : '<span class="sublabel">Aucun tour joué</span>'}</div>`).join('')}
+    <div id="turndetailbox" class="sublabel" style="margin-top:.5rem"></div>
+    <div class="card" style="margin-top:1rem;background:var(--bg)">
+      <h2>Nouveau tour — <span style="color:var(--accent)">${nextP}</span></h2>
+      <div class="row" style="margin-top:.4rem">
+        <button class="ghost" data-adj="-100">-100</button>
+        <button class="ghost" data-adj="-10">-10</button>
+        <button class="ghost" data-adj="-1">-1</button>
+        <input type="number" id="genscore" class="no-spin" value="0" style="width:5rem;text-align:center">
+        <button class="ghost" data-adj="1">+1</button>
+        <button class="ghost" data-adj="10">+10</button>
+        <button class="ghost" data-adj="100">+100</button>
+      </div>
+      <div style="margin-top:.6rem"><button id="validate">Valider le tour</button></div>
+    </div>`;
+  } else if(g.mode==='ohanami'){
+    game.ohanamiRounds = game.ohanamiRounds || [{},{},{}];
+    const cs = game.ohanamiCurrentSeason||0;
+    ohaEnsureSeason(game, cs);
+    const fields = OHA_FIELDS[cs];
+    body = `<table><thead><tr><th>Joueur</th><th>Saison 1</th><th>Saison 2</th><th>Saison 3</th><th>Total</th></tr></thead><tbody>
+      ${game.players.map(p=>{
+        const s=[0,1,2].map(ri=>{ const c=(game.ohanamiRounds[ri]&&game.ohanamiRounds[ri][p]) || {}; return game.ohanamiRounds[ri]&&game.ohanamiRounds[ri][p]!==undefined ? ohanamiRoundScore(ri,c) : '—'; });
+        return `<tr><td>${p}</td><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td><td><b>${t[p]}</b></td></tr>`;
+      }).join('')}
+      </tbody></table>
+      <div class="row" style="margin-top:.8rem">
+        <button class="ghost" id="ohaprev" ${cs===0?'disabled':''}>◀ Saison précédente</button>
+        <span class="sublabel">Saison ${cs+1} / 3</span>
+        <button class="ghost" id="ohanext" ${cs===2?'disabled':''}>Saison suivante ▶</button>
+      </div>
+      <div class="card" style="margin-top:.6rem;background:var(--bg)">
+        <h2>🌸 Saison ${cs+1}</h2>
+        <table><thead><tr><th>Joueur</th>${fields.map(f=>`<th>${OHA_LABEL[f]}</th>`).join('')}<th>Score saison</th></tr></thead><tbody>
+        ${game.players.map(p=>{ const c=game.ohanamiRounds[cs][p]; const rs=ohanamiRoundScore(cs,c); const total=ohaTotalCards(c); const maxT=ohaMaxTotal(cs);
+          return `<tr><td>${p}</td>${fields.map(f=>{ const floor=ohaFloor(game,cs,p,f); const val=c[f]||0;
+            return `<td><div class="row" style="gap:.2rem;justify-content:center;flex-wrap:nowrap">
+            <button type="button" class="ghost ohastep" data-d="-1" style="padding:.25rem .55rem" ${val<=floor?'disabled':''}>−</button>
+            <input type="number" min="${floor}" class="no-spin" data-ri="${cs}" data-p="${p}" data-f="${f}" value="${val}" style="width:2.4rem;text-align:center">
+            <button type="button" class="ghost ohastep" data-d="1" style="padding:.25rem .55rem" ${total>=maxT?'disabled':''}>+</button>
+          </div></td>`; }).join('')}<td>${rs}</td></tr>`; }).join('')}
+        </tbody></table>
+        <div class="sublabel">Nombre de cartes cumulées dans les jardins depuis le début de la partie (ça ne peut qu'augmenter).</div>
+      </div>`;
+  } else { // dice mode: mille sabords
+    const tbp={}; game.players.forEach(p=>tbp[p]=[]);
+    (game.turns||[]).forEach((tu,i)=>{ if(tbp[tu.player]) tbp[tu.player].push({...tu,idx:i}); });
+    const lastP = (()=>{ const rot=(game.turns||[]).filter(tu=>!tu.malus); return rot.length?rot[rot.length-1].player:null; })();
+    nextP = lastP ? game.players[(game.players.indexOf(lastP)+1)%game.players.length] : game.players[0];
+    body=`${game.finished?`<div class="card" style="background:var(--accent);color:#fff;text-align:center;font-weight:700">🏆 ${game.winner} remporte la partie — Magie Pirate (9 symboles identiques) ! 🏆</div>`:''}
+    <div class="sublabel">Objectif : ${g.target} points.</div>
+    <table><thead><tr><th>Joueur</th><th>Total</th></tr></thead><tbody>
+    ${game.players.map(p=>`<tr><td>${p}${t[p]>=g.target?' 🏆':''}</td><td>${t[p]}</td></tr>`).join('')}
+    </tbody></table>
+    ${game.players.map(p=>`<div class="sublabel" style="margin-top:.5rem"><b>${p}</b></div><div class="row">
+      ${tbp[p].length? tbp[p].map((tu,ix)=>`<span class="chip" data-turn="${tu.idx}">Tour ${ix+1} : ${tu.points}</span>`).join('') : '<span class="sublabel">Aucun tour joué</span>'}</div>`).join('')}
+    <div id="turndetailbox" class="sublabel" style="margin-top:.5rem"></div>
+    <div class="card" style="margin-top:1rem;background:var(--bg)">
+      <h2>Nouveau tour — <span style="color:var(--accent)">${nextP}</span></h2>
+      <div class="sublabel">Carte Pirate active</div>
+      <select id="cardkey" style="width:100%;padding:.5rem;border-radius:8px">
+        ${Object.entries(PIRATE_CARDS).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join('')}
+      </select>
+      <div class="row" style="margin-top:.6rem">
+        <label style="display:flex;align-items:center;gap:.4rem"><input type="checkbox" id="isIsland"> Île de la Tête-de-Mort (4+ crânes au 1er lancer)</label>
+      </div>
+      <div id="cardExtra"></div>
+      <div id="diceblock">
+        <div class="sublabel" style="margin-top:.6rem">Dés obtenus</div>
+        <div class="row">
+          ${[['skull','💀'],['gold','🪙'],['diamond','💎'],['sabre','⚔️'],['singe','🐒'],['perroquet','🦜']].map(([id,icon])=>`<span style="min-width:3.6rem;text-align:center"><span style="font-size:1.6rem;display:block">${icon}</span>
+            <button type="button" class="ghost dicestep" data-target="d_${id}" data-d="-1" style="padding:.2rem .5rem">−</button>
+            <input type="number" min="0" class="no-spin" id="d_${id}" value="0" style="width:2.2rem;text-align:center">
+            <button type="button" class="ghost dicestep" data-target="d_${id}" data-d="1" style="padding:.2rem .5rem">+</button></span>`).join('')}
+        </div>
+        <div class="row" style="margin-top:.6rem"><button class="ghost" id="calc">Calculer</button>
+        <span>Score du tour (modifiable) : <input type="number" id="turnscore" value="0" style="width:5rem"></span></div>
+        <div class="sublabel" id="calcdetail">⚠️ Barème officiel (3=100, 4=200, 5=500, 6=1000, 7=2000, 8=4000 ; or/diamant +100 chacun). Cartes Bataille pirate / Île au trésor non gérées ici.</div>
+      </div>
+      <div id="islandblock" style="display:none;margin-top:.6rem">
+        <div class="sublabel">Nombre de têtes de mort obtenues aux dés sur l'île (hors bonus carte)</div>
+        <button type="button" class="ghost dicestep" data-target="islandskulls" data-d="-1">−</button>
+        <input type="number" min="4" class="no-spin" id="islandskulls" value="4" style="width:3rem;text-align:center">
+        <button type="button" class="ghost dicestep" data-target="islandskulls" data-d="1">+</button>
+        <div class="sublabel">Carte active "${PIRATE_CARDS.skull1.label}"/"${PIRATE_CARDS.skull2.label}" : bonus ajouté automatiquement au total. Chaque adversaire perd 100 pts par tête (200 si carte Pirate active). ${nextP} ne marque rien ce tour.</div>
+      </div>
+      <div style="margin-top:.6rem"><button id="validate">Valider le tour</button> <button class="danger" id="lostBtn">Tour perdu (3+ crânes)</button></div>
+    </div>`;
+  }
+  m.innerHTML=`<div class="card">
+    <h2>${g.icon} ${g.label} ${rank.length?`— en tête : <span class="rank1">${rank[0]}</span>`:''}</h2>
+    ${body}
+  </div>
+  <div class="card row">
+    <button class="ghost" id="exportg">Exporter la partie (JSON)</button>
+    <button class="ghost" id="quit">Suspendre / Changer</button>
+    <button class="danger" id="finish">Terminer la partie</button>
+    <span class="sublabel" id="expstatus2"></span>
+    <div id="finishconfirm"></div>
+  </div>`;
+
+  if(g.mode==='rounds' && game.entryMode!=='turns'){
+    m.querySelector('#addround').onclick=()=>{game.rounds.push({scores:{}}); persistGame(gt); render();};
+    m.querySelectorAll('td input').forEach(inp=>inp.onchange=()=>{
+      game.rounds[+inp.dataset.r].scores[inp.dataset.p]=inp.value; persistGame(gt); render();
+    });
+  } else if(g.mode==='rounds' && game.entryMode==='turns'){
+    m.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
+      const inp=m.querySelector('#genscore'); inp.value=(+inp.value||0)+(+b.dataset.adj);
+    });
+    m.querySelector('#validate').onclick=()=>{
+      const pts=+m.querySelector('#genscore').value||0;
+      game.turns=game.turns||[];
+      if(editingIndex!==null){ game.turns[editingIndex].points=pts; }
+      else { game.turns.push({player:nextP,points:pts,malus:false}); }
+      persistGame(gt); render();
+    };
+    m.querySelectorAll('[data-turn]').forEach(chip=>chip.onclick=()=>{
+      const idx=+chip.dataset.turn, tu=game.turns[idx];
+      m.querySelector('#turndetailbox').innerHTML=`<b>${tu.player} — ${tu.points} pts</b>
+        <div class="row" style="margin-top:.4rem">
+          <input type="number" id="editval" value="${tu.points}" style="width:5rem">
+          <button class="ghost" id="saveturn">Enregistrer</button>
+          <button class="danger" id="delturn">Supprimer</button>
+        </div><div id="delconfirm"></div>`;
+      m.querySelector('#saveturn').onclick=()=>{ game.turns[idx].points=+m.querySelector('#editval').value||0; persistGame(gt); render(); };
+      m.querySelector('#delturn').onclick=()=>{
+        m.querySelector('#delconfirm').innerHTML=`<span class="sublabel">Confirmer la suppression ?</span>
+          <button class="danger" id="delyes">Oui, supprimer</button> <button class="ghost" id="delno">Annuler</button>`;
+        m.querySelector('#delyes').onclick=()=>{ game.turns.splice(idx,1); persistGame(gt); render(); };
+        m.querySelector('#delno').onclick=()=>{ m.querySelector('#delconfirm').innerHTML=''; };
+      };
+    });
+  } else if(g.mode==='ohanami'){
+    m.querySelectorAll('.ohastep').forEach(b=>b.onclick=()=>{
+      const inp=b.parentElement.querySelector('input');
+      inp.value=Math.max(0,(+inp.value||0)+(+b.dataset.d));
+      inp.dispatchEvent(new Event('change'));
+    });
+    m.querySelectorAll('[data-ri]').forEach(inp=>inp.onchange=()=>{
+      const ri=+inp.dataset.ri, p=inp.dataset.p, f=inp.dataset.f;
+      game.ohanamiRounds[ri][p]=game.ohanamiRounds[ri][p]||{blue:0,green:0,gray:0,pink:0};
+      const c=game.ohanamiRounds[ri][p];
+      const floor=ohaFloor(game,ri,p,f);
+      const otherTotal=ohaTotalCards(c)-(c[f]||0);
+      const maxT=ohaMaxTotal(ri);
+      let val=+inp.value||0;
+      if(val<floor) val=floor;
+      if(otherTotal+val>maxT) val=Math.max(floor, maxT-otherTotal);
+      c[f]=val;
+      if(f==='blue'||f==='green'){
+        for(let s=ri+1;s<=2;s++){
+          if(game.ohanamiRounds[s] && game.ohanamiRounds[s][p]){
+            game.ohanamiRounds[s][p][f]=Math.max(game.ohanamiRounds[s][p][f]||0, c[f]);
+          }
+        }
+      }
+      persistGame(gt); render();
+    });
+    const prevBtn=m.querySelector('#ohaprev'), nextBtn=m.querySelector('#ohanext');
+    if(prevBtn) prevBtn.onclick=()=>{ game.ohanamiCurrentSeason=Math.max(0,(game.ohanamiCurrentSeason||0)-1); persistGame(gt); render(); };
+    if(nextBtn) nextBtn.onclick=()=>{ game.ohanamiCurrentSeason=Math.min(2,(game.ohanamiCurrentSeason||0)+1); persistGame(gt); render(); };
+  } else {
+    function renderCardExtra(){
+      const ck=m.querySelector('#cardkey').value, extra=m.querySelector('#cardExtra');
+      const card=PIRATE_CARDS[ck];
+      if(card.special==='coffre'){
+        extra.innerHTML=`<div class="sublabel" style="margin-top:.4rem">Points déjà sécurisés dans le Coffre (comptent même si le tour est perdu)</div><input type="number" id="protectedPts" value="0" style="width:6rem">`;
+      } else if(card.special==='corsaire'){
+        extra.innerHTML=`<div class="sublabel" style="margin-top:.4rem">Sabres requis (bonus/malus prédéfini, ajustez sur vos cartes si différent)</div>
+          <select id="sabreRequired" style="padding:.4rem;border-radius:8px">${Object.entries(CORSAIRE_TABLE).map(([n,pts])=>`<option value="${n}">${n} sabres → ±${pts}pts</option>`).join('')}</select>`;
+      } else { extra.innerHTML=''; }
+    }
+    m.querySelector('#cardkey').onchange=renderCardExtra; renderCardExtra();
+    m.querySelector('#isIsland').onchange=(e)=>{
+      m.querySelector('#diceblock').style.display = e.target.checked ? 'none' : '';
+      m.querySelector('#islandblock').style.display = e.target.checked ? '' : 'none';
+    };
+    m.querySelectorAll('.dicestep').forEach(b=>b.onclick=()=>{
+      const inp=m.querySelector('#'+b.dataset.target);
+      inp.value=Math.max(0,(+inp.value||0)+(+b.dataset.d));
+    });
+    m.querySelector('#lostBtn').onclick=()=>{
+      const p=editingIndex!==null?game.turns[editingIndex].player:nextP;
+      const entry={player:p,points:0,detail:'Tour perdu (3+ têtes de mort)',cardLabel:PIRATE_CARDS[m.querySelector('#cardkey').value].label,malus:false};
+      game.turns=game.turns||[];
+      if(editingIndex!==null) game.turns[editingIndex]=entry; else game.turns.push(entry);
+      persistGame(gt); render();
+    };
+    m.querySelector('#calc').onclick=()=>{
+      const d={skull:m.querySelector('#d_skull').value,gold:m.querySelector('#d_gold').value,diamond:m.querySelector('#d_diamond').value,
+        sabre:m.querySelector('#d_sabre').value,singe:m.querySelector('#d_singe').value,perroquet:m.querySelector('#d_perroquet').value};
+      const pe=m.querySelector('#protectedPts'); if(pe) d.protected=pe.value;
+      const sr=m.querySelector('#sabreRequired'); if(sr){ d.sabreRequired=sr.value; }
+      const {score,detail,win}=calcMilleSabords(d, m.querySelector('#cardkey').value);
+      m.querySelector('#turnscore').value=score;
+      const totalDice=(+d.skull||0)+(+d.gold||0)+(+d.diamond||0)+(+d.sabre||0)+(+d.singe||0)+(+d.perroquet||0);
+      const warn = totalDice!==8 ? `⚠️ ${totalDice} dé(s) saisi(s) au lieu de 8 attendus. ` : '';
+      const box=m.querySelector('#calcdetail'); box.textContent=warn+'Détail : '+detail; box.dataset.detail=detail; box.dataset.win=win?'1':'';
+      if(win) box.style.cssText='color:var(--accent);font-weight:700;';
+    };
+    m.querySelector('#validate').onclick=()=>{
+      const cardKey=m.querySelector('#cardkey').value;
+      game.turns=game.turns||[];
+      if(m.querySelector('#isIsland').checked){
+        const p=nextP;
+        const diceSkulls=+m.querySelector('#islandskulls').value||0;
+        const totalSkulls=diceSkulls+PIRATE_CARDS[cardKey].skull;
+        const per = PIRATE_CARDS[cardKey].double ? 200 : 100;
+        game.turns.push({player:p,points:0,detail:`Île de la Tête-de-Mort : ${diceSkulls} crâne(s) aux dés + ${PIRATE_CARDS[cardKey].skull} (carte) = ${totalSkulls} — adversaires -${per}pts chacun`,cardLabel:PIRATE_CARDS[cardKey].label,malus:false});
+        game.players.forEach(op=>{ if(op!==p) game.turns.push({player:op,points:-(totalSkulls*per),detail:`Île de la Tête-de-Mort déclenchée par ${p} (${totalSkulls} crânes)`,cardLabel:'—',malus:true}); });
+      } else {
+        const pts=+m.querySelector('#turnscore').value||0;
+        const box=m.querySelector('#calcdetail');
+        const detail=box.dataset.detail || 'Score saisi/modifié manuellement';
+        const dice={skull:m.querySelector('#d_skull').value,gold:m.querySelector('#d_gold').value,diamond:m.querySelector('#d_diamond').value,
+          sabre:m.querySelector('#d_sabre').value,singe:m.querySelector('#d_singe').value,perroquet:m.querySelector('#d_perroquet').value};
+        if(editingIndex!==null){
+          const p=game.turns[editingIndex].player;
+          game.turns[editingIndex]={player:p,points:pts,detail,cardLabel:PIRATE_CARDS[cardKey].label,cardKey,dice,malus:false};
+        } else {
+          game.turns.push({player:nextP,points:pts,detail,cardLabel:PIRATE_CARDS[cardKey].label,cardKey,dice,malus:false});
+          if(box.dataset.win==='1'){ game.winner=nextP; game.finished=true; }
+        }
+      }
+      persistGame(gt); render();
+    };
+    m.querySelectorAll('[data-turn]').forEach(chip=>chip.onclick=()=>{
+      const idx=+chip.dataset.turn, tu=game.turns[idx];
+      m.querySelector('#turndetailbox').innerHTML=`<b>${tu.player} — ${tu.points} pts</b><br>Carte : ${tu.cardLabel||'—'}<br>${tu.detail||''}
+        <div class="row" style="margin-top:.4rem">
+          ${tu.dice?'<button class="ghost" id="editdice">Modifier (reprendre les dés)</button>':`<input type="number" id="editval" value="${tu.points}" style="width:5rem"><button class="ghost" id="saveturn">Enregistrer</button>`}
+          <button class="danger" id="delturn">Supprimer</button>
+        </div>
+        <div id="delconfirm"></div>`;
+      if(tu.dice){
+        m.querySelector('#editdice').onclick=()=>{
+          editingIndex=idx;
+          m.querySelector('#isIsland').checked=false;
+          m.querySelector('#diceblock').style.display='';
+          m.querySelector('#islandblock').style.display='none';
+          m.querySelector('#cardkey').value=tu.cardKey||'none';
+          renderCardExtra();
+          ['skull','gold','diamond','sabre','singe','perroquet'].forEach(id=>m.querySelector('#d_'+id).value=tu.dice[id]||0);
+          m.querySelector('#turnscore').value=tu.points;
+          m.querySelector('#calcdetail').textContent='Détail : '+(tu.detail||'');
+          m.querySelector('#calcdetail').dataset.detail=tu.detail||'';
+          m.querySelector('#validate').textContent='Enregistrer la modification';
+          m.querySelector('#diceblock').scrollIntoView({behavior:'smooth'});
+        };
+      } else {
+        m.querySelector('#saveturn').onclick=()=>{
+          game.turns[idx].points=+m.querySelector('#editval').value||0;
+          game.turns[idx].detail='Score modifié manuellement';
+          persistGame(gt); render();
+        };
+      }
+      m.querySelector('#delturn').onclick=()=>{
+        m.querySelector('#delconfirm').innerHTML=`<span class="sublabel">Confirmer la suppression ?</span>
+          <button class="danger" id="delyes">Oui, supprimer</button> <button class="ghost" id="delno">Annuler</button>`;
+        m.querySelector('#delyes').onclick=()=>{ game.turns.splice(idx,1); persistGame(gt); render(); };
+        m.querySelector('#delno').onclick=()=>{ m.querySelector('#delconfirm').innerHTML=''; };
+      };
+    });
+  }
+  m.querySelector('#exportg').onclick=()=>exportJSON(game, gt+'_'+new Date(game.date).toISOString().slice(0,10)+'.json', m.querySelector('#expstatus2'));
+  m.querySelector('#quit').onclick=()=>{persistGame(gt); view[gt]=null; render();};
+  m.querySelector('#finish').onclick=()=>{
+    const box=m.querySelector('#finishconfirm');
+    box.innerHTML=`<span class="sublabel">Terminer et supprimer cette partie sauvegardée ?</span>
+      <button class="danger" id="finyes">Oui, terminer</button> <button class="ghost" id="finno">Annuler</button>`;
+    box.querySelector('#finyes').onclick=()=>endGame(gt);
+    box.querySelector('#finno').onclick=()=>{box.innerHTML='';};
+  };
+}
+
+render();
+</script>
+</body>
+</html>
