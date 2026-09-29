@@ -43,6 +43,9 @@ th{font-size:.8rem;color:var(--sub);}
 td input{width:4.5rem;text-align:center;}
 .no-spin::-webkit-outer-spin-button,.no-spin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .no-spin{-moz-appearance:textfield;appearance:textfield;}
+.pin circle{fill:var(--accent2);stroke:var(--ink);stroke-width:1;}
+.pin text{fill:#fff;font-size:14px;font-weight:700;text-anchor:middle;dominant-baseline:central;}
+.pinbtn{width:2.7rem;height:2.7rem;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;}
 .sublabel{font-size:.8rem;color:var(--sub);margin:.3rem 0;}
 .saved-item{display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--line);}
 .rank1{font-weight:700;color:var(--accent);}
@@ -58,8 +61,36 @@ td input{width:4.5rem;text-align:center;}
 const GAMES = {
   ohanami:{label:'Ohanami',icon:'🌸',mode:'ohanami',highWins:true},
   generique:{label:'Générique',icon:'🔢',mode:'rounds',highWins:true,configurable:true},
-  millesabords:{label:'Mille Sabords',icon:'☠️',mode:'dice',highWins:true,target:6000}
+  millesabords:{label:'Mille Sabords',icon:'☠️',mode:'dice',highWins:true,target:6000},
+  molkky:{label:'Mölkky',icon:'🪵',mode:'molkky',highWins:true}
 };
+const MOLKKY_ROWS=[[7,9,8],[5,11,12,6],[3,10,4],[1,2]];
+function molkkyPinsSvg(){
+  let out='';
+  MOLKKY_ROWS.forEach((row,ri)=>{ const y=28+ri*48; row.forEach((n,i)=>{ const x=130+(i-(row.length-1)/2)*50;
+    out+=`<g class="pin" data-n="${n}"><circle cx="${x}" cy="${y}" r="20"/><text x="${x}" y="${y}">${n}</text></g>`; }); });
+  return `<svg viewBox="0 0 260 214" style="width:100%;max-width:280px;display:block;margin:0 auto" role="img" aria-label="Disposition initiale des 12 quilles">${out}<text x="130" y="206" style="font-size:11px;fill:var(--sub);text-anchor:middle">▼ lanceur (3 à 4 m)</text></svg>`;
+}
+function molkkyState(g){
+  const rev=g.revived||{}, st={};
+  g.players.forEach(p=>st[p]={total:0,misses:0,out:false,active:true,turns:[]});
+  let winner=null, reason='';
+  (g.turns||[]).forEach((tu,i)=>{
+    const s=st[tu.player]; if(!s) return;
+    const pts=Number(tu.points)||0, before=s.total; let after=before, kind='hit';
+    if(pts===0){ s.misses++; kind='miss'; }
+    else { s.misses=0; after=before+pts;
+      if(after>50){ after=25; kind='over'; }
+      else if(after===50){ kind='win'; if(!winner){ winner=tu.player; reason='50 pile'; } } }
+    s.total=after; s.turns.push({idx:i,points:pts,before,after,kind,misses:s.misses});
+  });
+  g.players.forEach(p=>{ st[p].out=st[p].misses>=3; st[p].active=!st[p].out||!!rev[p]; });
+  if(!winner && g.players.length>1){
+    const alive=g.players.filter(p=>st[p].active);
+    if(alive.length===1){ winner=alive[0]; reason='dernier joueur en lice'; }
+  }
+  return {st,winner,reason};
+}
 function pyramidal(n){ return n*(n+1)/2; }
 const OHA_FIELDS=[['blue'],['blue','green'],['blue','green','gray','pink']];
 const OHA_LABEL={blue:'Eau 🔵 (3pts)',green:'Végétation 🟢 (4pts)',gray:'Pierre ⬜ (7pts)',pink:'Sakura 🌸 (pyramidal)'};
@@ -310,6 +341,9 @@ function totals(g){
     (g.ohanamiRounds||[]).forEach((round,ri)=>{ g.players.forEach(p=>{ const c=round[p]; if(c) t[p]+=ohanamiRoundScore(ri,c); }); });
     return t;
   }
+  if(g.gameType==='molkky'){
+    const {st}=molkkyState(g); g.players.forEach(p=>t[p]=st[p].total); return t;
+  }
   (g.rounds||[]).forEach(r=>g.players.forEach(p=>t[p]+=Number(r.scores[p]||0)));
   (g.turns||[]).forEach(tu=>{ if(g.players.includes(tu.player)) t[tu.player]+=Number(tu.points||0); });
   if(g.gameType==='millesabords') g.players.forEach(p=>{ if(t[p]<0) t[p]=0; });
@@ -385,6 +419,43 @@ function renderPlay(m, gt){
         </tbody></table>
         <div class="sublabel">Nombre de cartes cumulées dans les jardins depuis le début de la partie (ça ne peut qu'augmenter).</div>
       </div>`;
+  } else if(g.mode==='molkky'){
+    const {st,winner,reason}=molkkyState(game);
+    function molkkyNext(){
+      const order=game.players;
+      const lastP=game.turns&&game.turns.length?game.turns[game.turns.length-1].player:null;
+      const startIdx=lastP?(order.indexOf(lastP)+1)%order.length:0;
+      for(let i=0;i<order.length;i++){ const idx=(startIdx+i)%order.length; if(st[order[idx]].active) return order[idx]; }
+      return order[startIdx];
+    }
+    nextP=molkkyNext();
+    const tbp={}; game.players.forEach(p=>tbp[p]=st[p].turns);
+    const maxTurns=Math.max(0,...game.players.map(p=>tbp[p].length));
+    body=`${winner?`<div class="card" style="background:var(--accent);color:#fff;text-align:center;font-weight:700">🏆 ${winner} remporte la partie (${reason}) !</div>`:''}
+    <div class="row"><button class="ghost" id="togglepins">${game.hidePins?'Afficher le schéma des quilles':'Masquer le schéma des quilles'}</button></div>
+    ${game.hidePins?'':`<div class="card" style="background:var(--bg);text-align:center;margin-top:.5rem">${molkkyPinsSvg()}
+      <div class="sublabel">1 quille seule = son numéro. Plusieurs quilles = leur nombre. Objectif : 50 pile (au-delà, retombe à 25). 3 échecs de suite = éliminé.</div>
+    </div>`}
+    <table style="margin-top:.8rem"><thead><tr><th>Joueur</th><th>Total</th><th>Statut</th>${Array.from({length:maxTurns},(_,i)=>`<th>T${i+1}</th>`).join('')}</tr></thead><tbody>
+    ${game.players.map(p=>{ const s=st[p]; const revived=game.revived&&game.revived[p];
+      const statusTxt = s.out ? (revived?'🔓 Réintégré':'❌ Éliminé') : (s.misses>0?`⚠️ ${s.misses}/3`:'✅');
+      const reviveBtn = s.out&&!revived?` <button class="ghost" data-revive="${p}" style="padding:.1rem .4rem;font-size:.7rem">Laisser jouer</button>`:'';
+      const cells = Array.from({length:maxTurns},(_,i)=>{ const tu=tbp[p][i]; if(!tu) return '<td>—</td>';
+        const label = tu.kind==='miss'?'0':tu.points; const suf = tu.kind==='over'?' ↩':tu.kind==='win'?' 🏆':'';
+        return `<td><span class="chip" data-turn="${tu.idx}" style="padding:.15rem .4rem;display:inline-block">${label}${suf}</span></td>`; }).join('');
+      return `<tr><td>${p}</td><td>${s.total}</td><td>${statusTxt}${reviveBtn}</td>${cells}</tr>`; }).join('')}
+    </tbody></table>
+    <div id="turndetailbox" class="sublabel" style="margin-top:.5rem"></div>
+    <div class="card" style="margin-top:1rem;background:var(--bg)">
+      <h2>Nouveau tour — <span style="color:var(--accent)">${nextP}</span></h2>
+      <div class="sublabel">Score du tour (1 quille seule = son numéro, plusieurs = leur nombre)</div>
+      <div class="row" style="margin-top:.4rem;align-items:stretch;gap:.8rem;flex-wrap:wrap">
+        <div style="display:grid;grid-template-columns:repeat(6,2.7rem);grid-auto-rows:2.7rem;gap:.4rem">
+          ${Array.from({length:12},(_,i)=>i+1).map(n=>`<button class="sub pinbtn" data-score="${n}">${n}</button>`).join('')}
+        </div>
+        <button class="danger" id="missBtn" style="border-radius:12px;padding:0 1.2rem;font-weight:700">Raté</button>
+      </div>
+    </div>`;
   } else { // dice mode: mille sabords
     const tbp={}; game.players.forEach(p=>tbp[p]=[]);
     (game.turns||[]).forEach((tu,i)=>{ if(tbp[tu.player]) tbp[tu.player].push({...tu,idx:i}); });
@@ -503,6 +574,35 @@ function renderPlay(m, gt){
     const prevBtn=m.querySelector('#ohaprev'), nextBtn=m.querySelector('#ohanext');
     if(prevBtn) prevBtn.onclick=()=>{ game.ohanamiCurrentSeason=Math.max(0,(game.ohanamiCurrentSeason||0)-1); persistGame(gt); render(); };
     if(nextBtn) nextBtn.onclick=()=>{ game.ohanamiCurrentSeason=Math.min(2,(game.ohanamiCurrentSeason||0)+1); persistGame(gt); render(); };
+  } else if(g.mode==='molkky'){
+    m.querySelector('#togglepins').onclick=()=>{ game.hidePins=!game.hidePins; persistGame(gt); render(); };
+    m.querySelectorAll('.pinbtn').forEach(b=>b.onclick=()=>{
+      game.turns=game.turns||[]; game.turns.push({player:nextP,points:+b.dataset.score,malus:false});
+      persistGame(gt); render();
+    });
+    m.querySelector('#missBtn').onclick=()=>{
+      game.turns=game.turns||[]; game.turns.push({player:nextP,points:0,malus:false});
+      persistGame(gt); render();
+    };
+    m.querySelectorAll('[data-revive]').forEach(b=>b.onclick=()=>{
+      game.revived=game.revived||{}; game.revived[b.dataset.revive]=true; persistGame(gt); render();
+    });
+    m.querySelectorAll('[data-turn]').forEach(chip=>chip.onclick=()=>{
+      const idx=+chip.dataset.turn, tu=game.turns[idx];
+      m.querySelector('#turndetailbox').innerHTML=`<b>${tu.player} — ${tu.points} pts</b>
+        <div class="row" style="margin-top:.4rem">
+          <input type="number" min="0" max="12" id="editval" value="${tu.points}" style="width:5rem">
+          <button class="ghost" id="saveturn">Enregistrer</button>
+          <button class="danger" id="delturn">Supprimer</button>
+        </div><div id="delconfirm"></div>`;
+      m.querySelector('#saveturn').onclick=()=>{ game.turns[idx].points=Math.max(0,Math.min(12,+m.querySelector('#editval').value||0)); persistGame(gt); render(); };
+      m.querySelector('#delturn').onclick=()=>{
+        m.querySelector('#delconfirm').innerHTML=`<span class="sublabel">Confirmer la suppression ?</span>
+          <button class="danger" id="delyes">Oui, supprimer</button> <button class="ghost" id="delno">Annuler</button>`;
+        m.querySelector('#delyes').onclick=()=>{ game.turns.splice(idx,1); persistGame(gt); render(); };
+        m.querySelector('#delno').onclick=()=>{ m.querySelector('#delconfirm').innerHTML=''; };
+      };
+    });
   } else {
     function renderCardExtra(){
       const ck=m.querySelector('#cardkey').value, extra=m.querySelector('#cardExtra');
