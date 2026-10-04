@@ -100,6 +100,7 @@ function ohaFloor(game,ri,p,f){
 }
 function ohaMaxTotal(ri){ return (ri+1)*10; }
 function ohaTotalCards(c){ return (c.blue||0)+(c.green||0)+(c.gray||0)+(c.pink||0); }
+function ohaFieldScore(f,val){ if(f==='blue') return val*3; if(f==='green') return val*4; if(f==='gray') return val*7; if(f==='pink') return pyramidal(val); return 0; }
 function ohaEnsureSeason(game, ri){
   if(!game.ohanamiRounds[ri]) game.ohanamiRounds[ri]={};
   game.players.forEach(p=>{
@@ -363,7 +364,15 @@ function renderPlay(m, gt){
   let editingIndex=null;
   if(g.mode==='rounds' && game.entryMode!=='turns'){
     body=`<table><thead><tr><th>Manche</th>${game.players.map(p=>`<th>${p}</th>`).join('')}</tr></thead><tbody>
-      ${game.rounds.map((r,ri)=>`<tr><td>${ri+1}</td>${game.players.map(p=>`<td><input type="number" data-r="${ri}" data-p="${p}" value="${r.scores[p]??''}"></td>`).join('')}</tr>`).join('')}
+      ${game.rounds.map((r,ri)=>`<tr><td>${ri+1}</td>${game.players.map(p=>`<td><div style="display:flex;flex-direction:column;align-items:center;gap:.2rem">
+        <input type="number" class="no-spin" data-r="${ri}" data-p="${p}" value="${r.scores[p]??''}" style="width:3.6rem;text-align:center">
+        <div class="row" style="gap:.15rem;flex-wrap:nowrap;justify-content:center">
+          <button type="button" class="ghost radj" data-adj="-10" style="padding:.1rem .3rem;font-size:.68rem">-10</button>
+          <button type="button" class="ghost radj" data-adj="-1" style="padding:.1rem .3rem;font-size:.68rem">-1</button>
+          <button type="button" class="ghost radj" data-adj="1" style="padding:.1rem .3rem;font-size:.68rem">+1</button>
+          <button type="button" class="ghost radj" data-adj="10" style="padding:.1rem .3rem;font-size:.68rem">+10</button>
+        </div>
+      </div></td>`).join('')}</tr>`).join('')}
     </tbody><tfoot><tr><th>Total</th>${game.players.map(p=>`<th>${t[p]}</th>`).join('')}</tr></tfoot></table>
     <div style="margin-top:.8rem"><button class="sub" id="addround">+ Manche</button></div>`;
   } else if(g.mode==='rounds' && game.entryMode==='turns'){
@@ -395,10 +404,12 @@ function renderPlay(m, gt){
     const cs = game.ohanamiCurrentSeason||0;
     ohaEnsureSeason(game, cs);
     const fields = OHA_FIELDS[cs];
-    body = `<table><thead><tr><th>Joueur</th><th>Saison 1</th><th>Saison 2</th><th>Saison 3</th><th>Total</th></tr></thead><tbody>
+    const visibleSeasons=[0,1,2].filter(ri=>ri<=cs);
+    body = `<table><thead><tr><th>Joueur</th>${visibleSeasons.map(ri=>`<th>Saison ${ri+1}</th>`).join('')}<th>Total</th></tr></thead><tbody>
       ${game.players.map(p=>{
-        const s=[0,1,2].map(ri=>{ const c=(game.ohanamiRounds[ri]&&game.ohanamiRounds[ri][p]) || {}; return game.ohanamiRounds[ri]&&game.ohanamiRounds[ri][p]!==undefined ? ohanamiRoundScore(ri,c) : '—'; });
-        return `<tr><td>${p}</td><td>${s[0]}</td><td>${s[1]}</td><td>${s[2]}</td><td><b>${t[p]}</b></td></tr>`;
+        const s=visibleSeasons.map(ri=>{ const c=(game.ohanamiRounds[ri]&&game.ohanamiRounds[ri][p])||{}; return ohanamiRoundScore(ri,c); });
+        const restrictedTotal=s.reduce((a,b)=>a+b,0);
+        return `<tr><td>${p}</td>${s.map(v=>`<td>${v}</td>`).join('')}<td><b>${restrictedTotal}</b></td></tr>`;
       }).join('')}
       </tbody></table>
       <div class="row" style="margin-top:.8rem">
@@ -415,7 +426,7 @@ function renderPlay(m, gt){
             <button type="button" class="ghost ohastep" data-d="-1" style="padding:.25rem .55rem" ${val<=floor?'disabled':''}>−</button>
             <input type="number" min="${floor}" class="no-spin" data-ri="${cs}" data-p="${p}" data-f="${f}" value="${val}" style="width:2.4rem;text-align:center">
             <button type="button" class="ghost ohastep" data-d="1" style="padding:.25rem .55rem" ${total>=maxT?'disabled':''}>+</button>
-          </div></td>`; }).join('')}<td>${rs}</td></tr>`; }).join('')}
+          </div><div class="sublabel" style="text-align:center">= ${ohaFieldScore(f,val)}pts</div></td>`; }).join('')}<td>${rs}</td></tr>`; }).join('')}
         </tbody></table>
         <div class="sublabel">Nombre de cartes cumulées dans les jardins depuis le début de la partie (ça ne peut qu'augmenter).</div>
       </div>`;
@@ -517,6 +528,11 @@ function renderPlay(m, gt){
     m.querySelector('#addround').onclick=()=>{game.rounds.push({scores:{}}); persistGame(gt); render();};
     m.querySelectorAll('td input').forEach(inp=>inp.onchange=()=>{
       game.rounds[+inp.dataset.r].scores[inp.dataset.p]=inp.value; persistGame(gt); render();
+    });
+    m.querySelectorAll('.radj').forEach(b=>b.onclick=()=>{
+      const inp=b.closest('td').querySelector('input');
+      inp.value=(+inp.value||0)+(+b.dataset.adj);
+      inp.dispatchEvent(new Event('change'));
     });
   } else if(g.mode==='rounds' && game.entryMode==='turns'){
     m.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>{
