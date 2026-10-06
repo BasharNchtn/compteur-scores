@@ -27,6 +27,17 @@ Ce choix garantit qu'on peut toujours l'utiliser hors ligne, sans dépendre d'un
 - Chaque partie peut être **suspendue puis reprise** plus tard.
 - Une partie peut être **exportée / importée en JSON**, pour la sauvegarder ou la transférer entre appareils.
 
+## Ce que cette application n'est volontairement PAS
+
+Pour garder les choses simples et fiables, certains choix sont délibérés :
+
+- **Pas de serveur, pas de synchronisation à distance.** Aucune donnée n'est envoyée ni reçue depuis un serveur — tout reste dans le navigateur local (`localStorage`).
+- **Pas d'historique partagé entre appareils.** Une partie jouée sur un téléphone n'apparaît pas automatiquement sur un autre appareil.
+- **Pas d'objectif de persistance à long terme.** Le but est de suivre le **score courant d'une partie en cours**, pas de constituer une base de données de parties.
+- **Pas de statistiques intégrées.** Si on veut analyser des parties, comparer des scores dans le temps, etc., ce n'est pas le rôle de cet outil : on **exporte en JSON** et c'est une **autre application** (ou une autre page) qui s'en charge, séparément.
+
+Bref : un compteur de score autonome, pas une plateforme de suivi de jeux de société. Si un de ces besoins devient important, la bonne réponse est un outil séparé qui consomme les exports JSON — pas d'alourdir ce fichier.
+
 ## Évolutions prévues
 
 D'autres jeux pourront être ajoutés au fil du temps, au cas par cas selon les besoins.
