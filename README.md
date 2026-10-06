@@ -4,7 +4,7 @@ Une application web pour compter les scores de différents jeux de société, sa
 
 ## Fonctionnement
 
-Il s'agit d'un **fichier HTML unique** (`scores.html`), autonome, sans dépendance externe ni serveur.
+Il s'agit d'un **fichier HTML unique** (`index.html`), autonome, sans dépendance externe ni serveur. Ce nom n'est pas anodin : c'est celui attendu pour que la page se lance directement à l'adresse racine une fois hébergée (GitHub Pages, etc.).
 Il est fait pour être **utilisé tel quel** :
 
 - Il suffit d'ouvrir le fichier dans un navigateur (double-clic, ou glisser-déposer dans un onglet).
@@ -41,3 +41,4 @@ Un point à garder à l'esprit : **l'application reste en français**, y compris
 ## Transparence
 
 Cette application a été réalisée pour l'essentiel avec l'aide d'une IA (Claude, Anthropic), à travers des échanges itératifs pour définir les règles, l'ergonomie et corriger les bugs. Pas de raison de le cacher.
+
