@@ -43,6 +43,16 @@ Bref : un compteur de score autonome, pas une plateforme de suivi de jeux de soc
 D'autres jeux pourront être ajoutés au fil du temps, au cas par cas selon les besoins.
 Un point à garder à l'esprit : **l'application reste en français**, y compris pour les futurs jeux ajoutés — pas de version anglaise prévue pour l'instant.
 
+## Conventions pour contribuer
+
+Quelques règles établies au fil du développement, à respecter pour toute évolution :
+
+- **Jamais de flèches natives sur les champs `number`** pour ajuster un score — elles n'apparaissent pas sur Chrome mobile. Toujours des boutons +/- explicites (`class="step" data-target="<id de l'input>" data-step="<n>"`), qui sont automatiquement pris en charge par `bindSteppers()`.
+- **Jamais de `confirm()` / `prompt()` natifs.** L'application tourne dans un environnement où ces popups peuvent être bloquées. Toute confirmation (suppression, etc.) se fait avec une petite UI intégrée à la page (voir `attachDeleteConfirm()`).
+- **Un mode de jeu = une fonction autonome.** Chaque mode (`renderRoundsTogether`, `renderOhanami`, `renderMolkky`, `renderMilleSabords`, etc.) construit son HTML *et* attache ses propres événements dans la même fonction, plutôt que de séparer "construction du HTML" et "branchement des événements" en deux blocs distants — c'est ce qui causait des bugs de variables hors de portée avant la refactorisation.
+- **Toute nouvelle logique de calcul (score, règle spéciale...) doit être une fonction pure**, sans dépendance au DOM, placée avant la ligne `let tab = 'players';` dans le script — c'est ce qui permet à `tests.js` de l'extraire et de la tester.
+- **Avant de publier une modification** : `node --check` sur le script extrait (évite une page blanche en cas d'erreur de syntaxe), puis `node tests.js` (vérifie que les règles de calcul existantes n'ont pas régressé). Idéalement, ajouter un test pour toute nouvelle règle de calcul.
+
 ## Structure technique
 
 - HTML / CSS / JavaScript pur (vanilla), aucune librairie externe.
