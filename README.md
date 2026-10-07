@@ -24,8 +24,13 @@ Ce choix garantit qu'on peut toujours l'utiliser hors ligne, sans dépendre d'un
 ## Gestion des joueurs et des parties
 
 - Une **liste de joueurs** commune à tous les jeux, réutilisable d'une partie à l'autre.
+- À chaque nouvelle partie, le **dernier groupe de joueurs (et leur ordre)** utilisé pour ce jeu est proposé par défaut — modifiable à tout moment.
 - Chaque partie peut être **suspendue puis reprise** plus tard.
-- Une partie peut être **exportée / importée en JSON**, pour la sauvegarder ou la transférer entre appareils.
+- Une partie peut être **exportée / importée en JSON** individuellement, et un bouton **"Tout exporter / Tout importer"** (onglet Joueurs) permet une sauvegarde complète en un seul fichier (joueurs + toutes les parties en cours, tous jeux confondus) — utile avant de changer d'appareil ou de vider le cache du navigateur.
+
+## Installation sur mobile
+
+Le fichier embarque un manifeste web (auto-contenu, pas de fichier séparé) : sur Android/Chrome, le menu propose **"Ajouter à l'écran d'accueil"**, ce qui installe l'application avec sa propre icône et l'ouvre en plein écran, sans barre d'adresse — sans pour autant en faire une vraie PWA avec fonctionnement hors-ligne garanti (pas de service worker, volontairement, pour rester simple).
 
 ## Ce que cette application n'est volontairement PAS
 

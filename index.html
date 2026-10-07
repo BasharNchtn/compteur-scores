@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Compteur de Scores</title>
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%20%22Compteur%20de%20Scores%22%2C%20%22short_name%22%3A%20%22Scores%22%2C%20%22start_url%22%3A%20%22./index.html%22%2C%20%22scope%22%3A%20%22./%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%23faf7f2%22%2C%20%22theme_color%22%3A%20%22%23c2622f%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A//www.w3.org/2000/svg%2522%2520viewBox%253D%25220%25200%2520192%2520192%2522%253E%253Crect%2520width%253D%2522192%2522%2520height%253D%2522192%2522%2520rx%253D%252236%2522%2520fill%253D%2522%2523c2622f%2522/%253E%253Ctext%2520x%253D%252296%2522%2520y%253D%2522128%2522%2520font-size%253D%2522108%2522%2520text-anchor%253D%2522middle%2522%253E%25F0%259F%258E%25B2%253C/text%253E%253C/svg%253E%22%2C%20%22sizes%22%3A%20%22192x192%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%2C%20%22purpose%22%3A%20%22any%22%7D%2C%20%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A//www.w3.org/2000/svg%2522%2520viewBox%253D%25220%25200%2520192%2520192%2522%253E%253Crect%2520width%253D%2522192%2522%2520height%253D%2522192%2522%2520rx%253D%252236%2522%2520fill%253D%2522%2523c2622f%2522/%253E%253Ctext%2520x%253D%252296%2522%2520y%253D%2522128%2522%2520font-size%253D%2522108%2522%2520text-anchor%253D%2522middle%2522%253E%25F0%259F%258E%25B2%253C/text%253E%253C/svg%253E%22%2C%20%22sizes%22%3A%20%22512x512%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%2C%20%22purpose%22%3A%20%22any%22%7D%2C%20%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%253Csvg%2520xmlns%253D%2522http%253A//www.w3.org/2000/svg%2522%2520viewBox%253D%25220%25200%2520192%2520192%2522%253E%253Crect%2520width%253D%2522192%2522%2520height%253D%2522192%2522%2520rx%253D%252236%2522%2520fill%253D%2522%2523c2622f%2522/%253E%253Ctext%2520x%253D%252296%2522%2520y%253D%2522128%2522%2520font-size%253D%2522108%2522%2520text-anchor%253D%2522middle%2522%253E%25F0%259F%258E%25B2%253C/text%253E%253C/svg%253E%22%2C%20%22sizes%22%3A%20%22any%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%2C%20%22purpose%22%3A%20%22maskable%22%7D%5D%7D">
+<meta name="theme-color" content="#c2622f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scores">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20192%20192%22%3E%3Crect%20width%3D%22192%22%20height%3D%22192%22%20rx%3D%2236%22%20fill%3D%22%23c2622f%22/%3E%3Ctext%20x%3D%2296%22%20y%3D%22128%22%20font-size%3D%22108%22%20text-anchor%3D%22middle%22%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20192%20192%22%3E%3Crect%20width%3D%22192%22%20height%3D%22192%22%20rx%3D%2236%22%20fill%3D%22%23c2622f%22/%3E%3Ctext%20x%3D%2296%22%20y%3D%22128%22%20font-size%3D%22108%22%20text-anchor%3D%22middle%22%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E">
 <style>
 :root{
   --bg:#faf7f2;--card:#fff;--ink:#2b2622;--sub:#7a7168;--accent:#c2622f;--accent2:#8a9a6b;
@@ -321,9 +327,18 @@ function renderPlayers(m){
     </div>
   </div>
   <div class="card row">
-    <button class="ghost" id="exp">Exporter (JSON)</button>
-    <button class="ghost" id="imp">Importer (JSON)</button>
+    <button class="ghost" id="exp">Exporter la liste de joueurs (JSON)</button>
+    <button class="ghost" id="imp">Importer une liste de joueurs (JSON)</button>
     <span class="sublabel" id="expstatus"></span>
+  </div>
+  <div class="card">
+    <h2>Sauvegarde complète</h2>
+    <div class="sublabel">Joueurs + toutes les parties en cours, tous jeux confondus — pratique avant de changer d'appareil ou de vider le cache du navigateur.</div>
+    <div class="row" style="margin-top:.6rem">
+      <button class="ghost" id="expAll">Tout exporter</button>
+      <button class="ghost" id="impAll">Tout importer</button>
+      <span class="sublabel" id="expstatusAll"></span>
+    </div>
   </div>`;
   const pl=m.querySelector('#plist');
   pl.innerHTML=players.map((p,i)=>`<span class="chip">${p} <b data-del="${i}" style="cursor:pointer">✕</b></span>`).join('')||'<span class="sublabel">Aucun joueur pour le moment.</span>';
@@ -334,6 +349,17 @@ function renderPlayers(m){
   };
   m.querySelector('#exp').onclick=()=>exportJSON(players,'joueurs.json', m.querySelector('#expstatus'));
   m.querySelector('#imp').onclick=()=>importJSON(d=>{if(Array.isArray(d)){players=[...new Set([...players,...d])];saveJSON('bs_players',players);render();}});
+  m.querySelector('#expAll').onclick=()=>{
+    const backup={type:'boardscore-full-backup',version:1,exportedAt:new Date().toISOString(),players,games:{}};
+    Object.keys(GAMES).forEach(gt=>{ backup.games[gt]=savedGames(gt); });
+    exportJSON(backup,'sauvegarde_complete_'+new Date().toISOString().slice(0,10)+'.json', m.querySelector('#expstatusAll'));
+  };
+  m.querySelector('#impAll').onclick=()=>importJSON(d=>{
+    if(!d || d.type!=='boardscore-full-backup'){ alert('Ce fichier n\'est pas une sauvegarde complète reconnue.'); return; }
+    players=[...new Set([...players, ...(d.players||[])])]; saveJSON('bs_players',players);
+    Object.keys(GAMES).forEach(gt=>{ if(d.games && d.games[gt]) setSavedGames(gt, d.games[gt]); });
+    render();
+  });
 }
 
 // ---- Setup / reprise d'une partie ----
@@ -366,7 +392,7 @@ function renderGameSetup(m, gt){
   <div class="card row">
     <button class="ghost" id="impg">Importer une partie (JSON)</button>
   </div>`;
-  let sel=[];
+  let sel=loadJSON('bs_lastplayers_'+gt,[]).filter(p=>players.includes(p));
   let highWinsChoice=true;
   let entryModeChoice='together';
   m.querySelectorAll('[data-hw]').forEach(c=>c.onclick=()=>{
@@ -400,6 +426,7 @@ function renderGameSetup(m, gt){
   };
   m.querySelector('#start').onclick=()=>{
     if(sel.length<1) return alert('Choisissez au moins un joueur.');
+    saveJSON('bs_lastplayers_'+gt, sel);
     view[gt]=migrateGame({id:uid(),date:Date.now(),gameType:gt,players:[...sel],rounds:[],turns:[],highWins:g.configurable?highWinsChoice:g.highWins,entryMode:g.configurable?entryModeChoice:'together'});
     render();
   };
