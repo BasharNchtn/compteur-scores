@@ -218,6 +218,7 @@ function migrateGame(game){
 let tab = 'players';
 let players = loadJSON('bs_players', []);
 let view = {}; // per-game current in-progress game, keyed by gameType
+let podiumMode = {}; // per-game : affichage transitoire de l'écran "score en cours" / fin de partie
 
 function loadJSON(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
 function saveJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
@@ -768,11 +769,41 @@ function renderMilleSabords(body, game, gt, g, t){
 }
 
 // ---- Écran de jeu : simple aiguillage vers le rendu du mode concerné ----
+// ---- Écran "Score en cours" / fin de partie : podium agrandi, réutilisé pour les deux usages ----
+function renderPodium(m, gt, game, g, t){
+  const hw = game.highWins ?? g.highWins;
+  const rank = ranking(game, t, hw);
+  const medals=['🥇','🥈','🥉'];
+  m.innerHTML = `<div class="card" style="text-align:center">
+    <h2>${g.icon} ${g.label}</h2>
+    ${rank.map((p,i)=>`<div style="margin:1.1rem 0">
+      <div style="font-size:${i===0?'2.2rem':i===1?'1.8rem':'1.4rem'}">${medals[i]||'　'} ${p}</div>
+      <div style="font-size:${i===0?'3.4rem':'2.4rem'};font-weight:700;color:var(--accent)">${t[p]}</div>
+    </div>`).join('')}
+  </div>
+  <div class="card row" style="justify-content:center">
+    <button class="sub" id="podiumBack">◀ Retour à la partie</button>
+    <button class="danger" id="podiumFinish">Terminer la partie</button>
+  </div>
+  <div id="podiumFinishConfirm"></div>`;
+  m.querySelector('#podiumBack').onclick=()=>{ podiumMode[gt]=false; render(); };
+  m.querySelector('#podiumFinish').onclick=()=>{
+    const box=m.querySelector('#podiumFinishConfirm');
+    box.innerHTML=`<div class="card row" style="justify-content:center"><span class="sublabel">Terminer et supprimer cette partie sauvegardée ?</span>
+      <button class="danger" id="pfYes">Oui, terminer</button> <button class="ghost" id="pfNo">Annuler</button></div>`;
+    box.querySelector('#pfYes').onclick=()=>{ podiumMode[gt]=false; endGame(gt); };
+    box.querySelector('#pfNo').onclick=()=>{ box.innerHTML=''; };
+  };
+}
+
 function renderPlay(m, gt){
   const g=GAMES[gt], game=view[gt];
   migrateGame(game);
   const hw = game.highWins ?? g.highWins;
   const t=totals(game); const rank=ranking(game,t,hw);
+  if(podiumMode[gt]) return renderPodium(m, gt, game, g, t);
+  const usesTurns = g.mode==='molkky' || g.mode==='dice' || (g.mode==='rounds' && game.entryMode==='turns');
+  const canUndo = usesTurns && game.turns && game.turns.length>0;
   m.innerHTML=`<div class="card">
     <h2>${g.icon} ${g.label} ${rank.length?`— en tête : <span class="rank1">${rank[0]}</span>`:''}</h2>
     <div id="modebody"></div>
@@ -780,9 +811,9 @@ function renderPlay(m, gt){
   <div class="card row">
     <button class="ghost" id="exportg">Exporter la partie (JSON)</button>
     <button class="ghost" id="quit">Suspendre / Changer</button>
-    <button class="danger" id="finish">Terminer la partie</button>
+    ${canUndo?'<button class="ghost" id="undoBtn">↩ Annuler le dernier coup</button>':''}
+    <button class="sub" id="podiumBtn">🏆 Score en cours</button>
     <span class="sublabel" id="expstatus2"></span>
-    <div id="finishconfirm"></div>
   </div>`;
   const body = m.querySelector('#modebody');
   if(g.mode==='rounds' && game.entryMode!=='turns') renderRoundsTogether(body, game, gt, t);
@@ -793,12 +824,14 @@ function renderPlay(m, gt){
   bindSteppers(m);
   m.querySelector('#exportg').onclick=()=>exportJSON(game, gt+'_'+new Date(game.date).toISOString().slice(0,10)+'.json', m.querySelector('#expstatus2'));
   m.querySelector('#quit').onclick=()=>{persistGame(gt); view[gt]=null; render();};
-  m.querySelector('#finish').onclick=()=>{
-    const box=m.querySelector('#finishconfirm');
-    box.innerHTML=`<span class="sublabel">Terminer et supprimer cette partie sauvegardée ?</span>
-      <button class="danger" id="finyes">Oui, terminer</button> <button class="ghost" id="finno">Annuler</button>`;
-    box.querySelector('#finyes').onclick=()=>endGame(gt);
-    box.querySelector('#finno').onclick=()=>{box.innerHTML='';};
+  m.querySelector('#podiumBtn').onclick=()=>{ podiumMode[gt]=true; render(); };
+  const undoBtn=m.querySelector('#undoBtn');
+  if(undoBtn) undoBtn.onclick=()=>{
+    if(!game.turns || !game.turns.length) return;
+    while(game.turns.length && game.turns[game.turns.length-1].malus){ game.turns.pop(); }
+    if(game.turns.length) game.turns.pop();
+    if(g.mode==='dice'){ game.finished=false; game.winner=undefined; }
+    persistGame(gt); render();
   };
 }
 
