@@ -98,15 +98,17 @@ function molkkyState(g){
   return {st,winner,reason};
 }
 function pyramidal(n){ return n*(n+1)/2; }
+const OHA_PINK_MAX=15; // le score Sakura sature au-delà de 15 cerisiers
+function ohaPinkScore(n){ return pyramidal(Math.min(n||0,OHA_PINK_MAX)); }
 const OHA_FIELDS=[['blue'],['blue','green'],['blue','green','gray','pink']];
-const OHA_LABEL={blue:'Eau 🔵 (3pts)',green:'Végétation 🟢 (4pts)',gray:'Pierre ⬜ (7pts)',pink:'Sakura 🌸 (pyramidal)'};
+const OHA_LABEL={blue:'Eau 🔵 (3pts)',green:'Végétation 🟢 (4pts)',gray:'Pierre ⬜ (7pts)',pink:'Sakura 🌸 (pyramidal, max 15)'};
 function ohaFloor(game,ri,p,f){
   if((f==='blue'||f==='green') && ri>0){ const prev=game.ohanamiRounds[ri-1]&&game.ohanamiRounds[ri-1][p]; return prev?(prev[f]||0):0; }
   return 0;
 }
 function ohaMaxTotal(ri){ return (ri+1)*10; }
 function ohaTotalCards(c){ return (c.blue||0)+(c.green||0)+(c.gray||0)+(c.pink||0); }
-function ohaFieldScore(f,val){ if(f==='blue') return val*3; if(f==='green') return val*4; if(f==='gray') return val*7; if(f==='pink') return pyramidal(val); return 0; }
+function ohaFieldScore(f,val){ if(f==='blue') return val*3; if(f==='green') return val*4; if(f==='gray') return val*7; if(f==='pink') return ohaPinkScore(val); return 0; }
 function ohaEnsureSeason(game, ri){
   if(!game.ohanamiRounds[ri]) game.ohanamiRounds[ri]={};
   game.players.forEach(p=>{
@@ -119,7 +121,7 @@ function ohaEnsureSeason(game, ri){
 function ohanamiRoundScore(ri,c){
   let s=(c.blue||0)*3;
   if(ri>=1) s+=(c.green||0)*4;
-  if(ri>=2) s+=(c.gray||0)*7 + pyramidal(c.pink||0);
+  if(ri>=2) s+=(c.gray||0)*7 + ohaPinkScore(c.pink);
   return s;
 }
 const COMBO={3:100,4:200,5:500,6:1000,7:2000,8:4000};

@@ -179,6 +179,9 @@ function check(label, cond) {
 
 {
   check('Score pyramidal Sakura : 4 cartes = 10 pts', X.ohaFieldScore('pink', 4) === 10);
+  check('Score Sakura : 15 cerisiers = 120 pts', X.ohaFieldScore('pink', 15) === 120);
+  check('Score Sakura : saturé au-delà de 15 cerisiers', X.ohaFieldScore('pink', 18) === 120);
+  check('Score saison 3 : Sakura saturé aussi dans le total de saison', X.ohanamiRoundScore(2, { blue: 0, green: 0, gray: 0, pink: 20 }) === 120);
   check('Score saison 1 : seule l\'eau compte', X.ohanamiRoundScore(0, { blue: 2, green: 5, gray: 5, pink: 5 }) === 6);
   check('Score saison 2 : eau + végétation comptent', X.ohanamiRoundScore(1, { blue: 2, green: 3, gray: 5, pink: 5 }) === 2 * 3 + 3 * 4);
 }
